@@ -1,4 +1,4 @@
-import { FileText, Package, BarChart3, Receipt, LogOut } from 'lucide-react';
+import { FileText, Package, BarChart3, Receipt, LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import logo from 'figma:asset/220dab80c3731b3a44f7ce1394443acd5caffa99.png';
 import { User } from '../types/api';
@@ -11,14 +11,16 @@ interface DashboardProps {
 
 export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
   const [userModules, setUserModules] = useState<string[]>([]);
+  const [username, setUsername] = useState<string>('');
 
   useEffect(() => {
-    // Get user modules from localStorage
+    // Get user modules and username from localStorage
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         const user: User = JSON.parse(userStr);
         setUserModules(user.modules || []);
+        setUsername(user.username || '');
       } catch (error) {
         console.error('Failed to parse user data:', error);
       }
@@ -66,14 +68,20 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
       <header className="border-b border-[#2a3144] bg-[#0f1419]/50 backdrop-blur-md">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <img src={logo} alt="Retaam Solutions" className="h-10" />
-          <Button
-            variant="ghost"
-            onClick={onLogout}
-            className="text-white hover:bg-[#1a1f2e] gap-2 h-9 px-3"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-white">
+              <UserIcon className="w-5 h-5" />
+              <span className="text-sm">{username}</span>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={onLogout}
+              className="text-white hover:bg-[#1a1f2e] gap-2 h-9 px-3"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
