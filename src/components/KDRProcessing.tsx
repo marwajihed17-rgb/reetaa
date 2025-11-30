@@ -3,6 +3,7 @@ import { ChevronLeft, User, Trash2, LogOut, Paperclip, Send } from 'lucide-react
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Package } from 'lucide-react';
+import { apiService } from '../services/api';
 
 interface KDRProcessingProps {
   onBack: () => void;
@@ -21,28 +22,51 @@ export function KDRProcessing({ onBack, onLogout }: KDRProcessingProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (message.trim() || attachments.length > 0) {
+      const messageText = message || `📎 ${attachments.length} file(s) attached`;
       const newMessage: Message = {
         id: Date.now(),
-        text: message || `📎 ${attachments.length} file(s) attached`,
+        text: messageText,
         sender: 'user',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages([...messages, newMessage]);
       setMessage('');
       setAttachments([]);
-      
-      // Simulate bot response
-      setTimeout(() => {
-        const botMessage: Message = {
-          id: Date.now(),
-          text: 'I received your message and I\'m processing it...',
-          sender: 'bot',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, botMessage]);
-      }, 1000);
+
+      try {
+        const userStr = localStorage.getItem('user');
+        const userId = userStr ? JSON.parse(userStr).username : undefined;
+
+        const response = await apiService.sendMessage(
+          messageText,
+          'user',
+          'kdr',
+          userId
+        );
+
+        if (response.success && response.botResponse) {
+          const botMessage: Message = {
+            id: Date.now(),
+            text: response.botResponse.text,
+            sender: 'bot',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, botMessage]);
+        }
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        setTimeout(() => {
+          const botMessage: Message = {
+            id: Date.now(),
+            text: 'I received your message and I\'m processing it...',
+            sender: 'bot',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, botMessage]);
+        }, 1000);
+      }
     }
   };
 
