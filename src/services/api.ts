@@ -24,6 +24,14 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
+
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(text || `Server returned non-JSON response: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
