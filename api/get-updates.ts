@@ -1,14 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { kv } from '@vercel/kv';
 
 interface ChatMessage {
   sessionId: string;
   reply: string;
   timestamp: number;
 }
-
-// Shared message store (same as receive-response.ts)
-// This works because Vercel serverless functions share memory within the same instance
-const messageStore = new Map<string, ChatMessage[]>();
 
 export default async function handler(
   req: VercelRequest,
@@ -37,12 +34,13 @@ export default async function handler(
       });
     }
 
-    // Get messages for this sessionId
-    const messages = messageStore.get(sessionId) || [];
+    // Get messages for this sessionId from Redis
+    const key = `chat:${sessionId}`;
+    const messages = await kv.get<ChatMessage[]>(key) || [];
 
-    // Immediately clear messages after retrieving (stateless cleanup)
+    // Immediately clear messages after retrieving
     if (messages.length > 0) {
-      messageStore.delete(sessionId);
+      await kv.del(key);
       console.log(`[get-updates] Retrieved and cleared ${messages.length} messages for session ${sessionId}`);
     }
 
