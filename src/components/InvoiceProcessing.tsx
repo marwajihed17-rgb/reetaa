@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { ChevronLeft, User, Trash2, LogOut, Paperclip, Send } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, User, Trash2, LogOut, Paperclip, Send, FileText, Download, Image as ImageIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { FileText } from 'lucide-react';
 import { apiService } from '../services/api';
+import { FileAttachment } from '../types/api';
 
 interface InvoiceProcessingProps {
   onBack: () => void;
@@ -15,6 +15,7 @@ interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: string;
+  files?: FileAttachment[];
 }
 
 export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) {
@@ -22,6 +23,18 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [username, setUsername] = useState<string>('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   // Get username from localStorage
   useEffect(() => {
@@ -36,14 +49,29 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
     }
   }, []);
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const handleSend = async () => {
     if (message.trim() || attachments.length > 0) {
-      const messageText = message || `📎 ${attachments.length} file(s) attached`;
+      const messageText = message || (attachments.length > 0 ? '' : '');
+
+      // Convert File objects to FileAttachment objects with blob URLs
+      const fileAttachments: FileAttachment[] = attachments.map(file => ({
+        name: file.name,
+        type: file.type,
+        url: URL.createObjectURL(file),
+        size: file.size
+      }));
+
       const newMessage: Message = {
         id: Date.now(),
         text: messageText,
         sender: 'user',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        files: fileAttachments.length > 0 ? fileAttachments : undefined
       };
       setMessages([...messages, newMessage]);
       setMessage('');
@@ -107,6 +135,42 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
     }
   };
 
+  // Helper function to check if file is an image
+  const isImageFile = (type: string) => {
+    return type.startsWith('image/');
+  };
+
+  // Helper function to get file icon based on type
+  const getFileIcon = (type: string) => {
+    if (isImageFile(type)) {
+      return <ImageIcon className="w-4 h-4" />;
+    }
+    return <FileText className="w-4 h-4" />;
+  };
+
+  // Handle file click - download for non-images, open in new tab for images
+  const handleFileClick = (file: FileAttachment) => {
+    if (isImageFile(file.type)) {
+      // Open image in new tab
+      window.open(file.url, '_blank');
+    } else {
+      // Trigger download for non-image files
+      const link = document.createElement('a');
+      link.href = file.url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // Format file size for display
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
@@ -161,7 +225,7 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
       </header>
 
       {/* Main Content - Scrollable Chat Area */}
-      <main className="flex-1 overflow-y-auto p-4 hide-scrollbar">
+      <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 hide-scrollbar">
         <div className="container mx-auto max-w-4xl h-full">
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
@@ -181,13 +245,43 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
                         : 'bg-[#1a1f2e]/80 backdrop-blur-md border border-[#2a3144] text-white'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                    <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
+                    {msg.text && (
+                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                    )}
+
+                    {/* Display file attachments */}
+                    {msg.files && msg.files.length > 0 && (
+                      <div className={`space-y-2 ${msg.text ? 'mt-2' : ''}`}>
+                        {msg.files.map((file, index) => (
+                          <div
+                            key={index}
+                            onClick={() => handleFileClick(file)}
+                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all hover:scale-105 ${
+                              msg.sender === 'user'
+                                ? 'bg-white/10 hover:bg-white/20'
+                                : 'bg-[#2a3144]/50 hover:bg-[#2a3144]'
+                            }`}
+                          >
+                            {getFileIcon(file.type)}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <p className={`text-xs ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
+                                {formatFileSize(file.size)}
+                              </p>
+                            </div>
+                            <Download className="w-4 h-4 shrink-0" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className={`text-xs mt-2 ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-500'}`}>
                       {msg.timestamp}
                     </p>
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
@@ -248,12 +342,6 @@ export function InvoiceProcessing({ onBack, onLogout }: InvoiceProcessingProps) 
               <Send className="w-5 h-5" />
             </Button>
           </div>
-          <p className="text-gray-600 text-xs text-center mt-3">
-            Activer Windows
-          </p>
-          <p className="text-gray-600 text-xs text-center">
-            Accédez aux paramètres pour activer Windows
-          </p>
         </div>
       </footer>
     </div>

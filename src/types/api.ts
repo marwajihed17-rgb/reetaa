@@ -16,6 +16,13 @@ export interface AuthResponse {
   message?: string;
 }
 
+export interface FileAttachment {
+  name: string;
+  type: string;
+  url: string;
+  size: number;
+}
+
 export interface Message {
   id: number;
   text: string;
@@ -23,6 +30,7 @@ export interface Message {
   timestamp: string;
   category?: 'invoice' | 'kdr' | 'ga' | 'kdr invoicing';
   userId?: string;
+  files?: FileAttachment[];
 }
 
 export interface MessageResponse {
