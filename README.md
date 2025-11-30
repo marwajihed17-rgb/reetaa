@@ -129,19 +129,25 @@ The application includes a powerful AI chat interface that supports **multiple a
 
 #### Quick Setup
 
-1. **Add chat module** to user's modules in Google Sheets:
+1. **Set up Vercel KV (REQUIRED)**:
+   - Go to Vercel dashboard → Storage → Create Database → KV
+   - Connect the KV database to your project
+   - See [VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md) for detailed instructions
+   - **⚠️ Without Vercel KV, the webhook feature will NOT work!**
+
+2. **Add chat module** to user's modules in Google Sheets:
    ```csv
    id,username,password,modules
    1,admin,admin123,"chat,invoice,kdr,ga"
    ```
 
-2. **Set up n8n workflow**:
+3. **Set up n8n workflow**:
    - Import `n8n-chat-workflow.json` into n8n
    - Update the Vercel API URL in the workflow
    - Activate the workflow
    - Copy the webhook URL
 
-3. **Configure frontend**:
+4. **Configure frontend**:
    ```bash
    # Add to .env
    VITE_N8N_WEBHOOK_URL=https://your-n8n-instance.app.n8n.cloud/webhook/chat
@@ -154,6 +160,7 @@ The application includes a powerful AI chat interface that supports **multiple a
 
 #### Documentation
 
+- 🔴 **[VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md)** - **REQUIRED: Vercel KV setup (must do first!)**
 - 📘 **[N8N_SETUP_GUIDE.md](./N8N_SETUP_GUIDE.md)** - Complete n8n workflow setup
 - 📗 **[CHAT_FEATURE.md](./CHAT_FEATURE.md)** - Architecture and customization
 - 📙 **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and debugging
