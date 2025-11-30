@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AnimatedLogo } from './AnimatedLogo';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { apiService } from '../services/api';
 import logo from 'figma:asset/220dab80c3731b3a44f7ce1394443acd5caffa99.png';
 
 interface LoginPageProps {
@@ -11,10 +12,30 @@ interface LoginPageProps {
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await apiService.login(username, password);
+
+      if (response.success && response.token) {
+        // Store token and user info
+        localStorage.setItem('authToken', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+        onLogin();
+      } else {
+        setError(response.error || 'Login failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -28,6 +49,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
             <div>
               <label htmlFor="username" className="block text-white mb-2">
                 Username
@@ -39,6 +66,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-[#242938] border-[#2a3144] text-white placeholder:text-gray-500"
+                required
+                disabled={loading}
               />
             </div>
 
@@ -53,14 +82,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-[#242938] border-[#2a3144] text-white placeholder:text-gray-500"
+                required
+                disabled={loading}
               />
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-[#4A90F5] to-[#C74AFF] hover:opacity-90 text-white h-11 animated-gradient"
+              className="w-full bg-gradient-to-r from-[#4A90F5] to-[#C74AFF] hover:opacity-90 text-white h-11 animated-gradient disabled:opacity-50"
+              disabled={loading}
             >
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
         </div>
