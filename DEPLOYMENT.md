@@ -68,12 +68,15 @@ https://docs.google.com/spreadsheets/d/e/2PACX-1vR.../pub?output=csv
 
    Before clicking "Deploy", add these environment variables:
 
-   | Name | Value |
-   |------|-------|
-   | `GOOGLE_SHEET_URL` | Your Google Sheets CSV URL |
-   | `VITE_API_BASE_URL` | `/api` |
-   | `VITE_APP_NAME` | `PAA Solutions Tool` |
-   | `VITE_APP_URL` | `https://www.paa-solutions.com` |
+   | Name | Value | Purpose |
+   |------|-------|---------|
+   | `VITE_GOOGLE_SHEET_URL` | Your Google Sheets CSV URL | Frontend (build time) |
+   | `GOOGLE_SHEET_URL` | Your Google Sheets CSV URL | Backend API (runtime) |
+   | `VITE_API_BASE_URL` | `/api` | API base path |
+   | `VITE_APP_NAME` | `PAA Solutions Tool` | App name |
+   | `VITE_APP_URL` | `https://www.paa-solutions.com` | App URL |
+
+   **⚠️ IMPORTANT**: You must set **BOTH** `VITE_GOOGLE_SHEET_URL` and `GOOGLE_SHEET_URL` with the same URL value. The frontend uses `VITE_GOOGLE_SHEET_URL` and the backend API uses `GOOGLE_SHEET_URL`.
 
 5. **Click "Deploy"**
 
@@ -98,8 +101,13 @@ https://docs.google.com/spreadsheets/d/e/2PACX-1vR.../pub?output=csv
 
 4. **Add Environment Variables**
    ```bash
-   vercel env add GOOGLE_SHEET_URL
+   # Frontend environment variable (build time)
+   vercel env add VITE_GOOGLE_SHEET_URL
    # Paste your Google Sheets URL when prompted
+
+   # Backend environment variable (runtime)
+   vercel env add GOOGLE_SHEET_URL
+   # Paste your Google Sheets URL when prompted (same URL as above)
 
    vercel env add VITE_API_BASE_URL
    # Enter: /api
@@ -110,6 +118,8 @@ https://docs.google.com/spreadsheets/d/e/2PACX-1vR.../pub?output=csv
    vercel env add VITE_APP_URL
    # Enter: https://www.paa-solutions.com
    ```
+
+   **Note**: Both `VITE_GOOGLE_SHEET_URL` and `GOOGLE_SHEET_URL` should have the same value.
 
 5. **Deploy to Production**
    ```bash
