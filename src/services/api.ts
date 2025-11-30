@@ -10,6 +10,14 @@ import type {
 
 const GOOGLE_SHEET_URL = import.meta.env.VITE_GOOGLE_SHEET_URL;
 
+// n8n Webhook URLs
+const N8N_WEBHOOK_URLS = {
+  invoice: import.meta.env.VITE_N8N_INVOICE_WEBHOOK_URL || 'https://n8n.srv1009033.hstgr.cloud/webhook/invoice',
+  kdr: import.meta.env.VITE_N8N_KDR_WEBHOOK_URL || 'https://n8n.srv1009033.hstgr.cloud/webhook/kdr',
+  ga: import.meta.env.VITE_N8N_GA_WEBHOOK_URL || 'https://n8n.srv1009033.hstgr.cloud/webhook/ga',
+  'kdr invoicing': import.meta.env.VITE_N8N_KDR_INVOICING_WEBHOOK_URL || 'https://n8n.srv1009033.hstgr.cloud/webhook/KDRprocessing',
+};
+
 class ApiService {
   // Parse CSV data from Google Sheets
   private async fetchSheetData(): Promise<SheetRow[]> {
@@ -127,14 +135,13 @@ class ApiService {
     }
   }
 
-  // Messages (stored locally for now)
+  // Messages - Send to n8n webhooks
   async sendMessage(
     text: string,
     sender: 'user' | 'bot',
     category?: 'invoice' | 'kdr' | 'ga' | 'kdr invoicing',
     userId?: string
   ): Promise<MessageResponse> {
-    // For now, just create a simple bot response
     const message: Message = {
       id: Date.now(),
       text,
@@ -144,9 +151,85 @@ class ApiService {
       userId
     };
 
+    // Send to n8n webhook if category is provided
+    if (category && N8N_WEBHOOK_URLS[category]) {
+      try {
+        const webhookUrl = N8N_WEBHOOK_URLS[category];
+
+        // Get username from userId or use 'unknown'
+        const username = userId || 'unknown';
+
+        // Send POST request to n8n webhook
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: text,
+            sender,
+            category,
+            userId,
+            username,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+
+        if (!response.ok) {
+          console.error(`n8n webhook error: ${response.status} ${response.statusText}`);
+          throw new Error(`Webhook request failed: ${response.status}`);
+        }
+
+        // Parse the response from n8n
+        const n8nResponse = await response.json();
+
+        // Extract bot response from n8n if available
+        let botResponseText = 'Message sent to processing workflow. You will receive a response shortly.';
+
+        if (n8nResponse.message || n8nResponse.response || n8nResponse.reply) {
+          botResponseText = n8nResponse.message || n8nResponse.response || n8nResponse.reply;
+        }
+
+        const botResponse: Message = {
+          id: Date.now() + 1,
+          text: botResponseText,
+          sender: 'bot',
+          timestamp: new Date().toISOString(),
+          category,
+          userId
+        };
+
+        return {
+          success: true,
+          message,
+          botResponse
+        };
+      } catch (error) {
+        console.error('Error sending to n8n webhook:', error);
+
+        // Return error response
+        const botResponse: Message = {
+          id: Date.now() + 1,
+          text: 'Sorry, there was an error processing your message. Please try again.',
+          sender: 'bot',
+          timestamp: new Date().toISOString(),
+          category,
+          userId
+        };
+
+        return {
+          success: false,
+          message,
+          botResponse,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+    }
+
+    // Fallback response if no category or webhook URL
     const botResponse: Message = {
       id: Date.now() + 1,
-      text: 'Message received. This is a simple response.',
+      text: 'Message received. Processing module not configured.',
       sender: 'bot',
       timestamp: new Date().toISOString(),
       category,
