@@ -1,8 +1,17 @@
-# Vercel KV Setup Guide for Webhook Feature
+# Redis Storage Setup Guide for Webhook Feature
 
 ## 🎯 Overview
 
-The webhook feature (n8n chat integration) requires **Vercel KV** (managed Redis) to work properly. This is necessary because Vercel serverless functions don't share memory between different API endpoints.
+The webhook feature (n8n chat integration) requires **Redis storage** to work properly. This is necessary because Vercel serverless functions don't share memory between different API endpoints.
+
+## ⚠️ Important: Vercel KV → Upstash Transition
+
+Vercel is transitioning from Vercel KV to direct **Upstash integration**. Both options work with this application:
+
+- **Option 1: Upstash (Recommended)** - Direct Upstash Redis integration
+- **Option 2: Vercel KV (Legacy)** - Existing Vercel KV (powered by Upstash)
+
+The code works with both since they use the same `@vercel/kv` SDK. Choose the option that appears in your Vercel dashboard.
 
 ## ❌ Why the Webhook Wasn't Working
 
@@ -20,7 +29,22 @@ Vercel KV is a managed Redis service that provides persistent storage shared acr
 
 ## 🔧 Setup Instructions
 
-### Step 1: Create a Vercel KV Database
+### Option 1: Upstash Integration (Recommended)
+
+If you see "Upstash Redis" in your Vercel Storage options:
+
+1. Go to your Vercel dashboard: https://vercel.com/dashboard
+2. Navigate to **Storage** tab
+3. Click **Create Database** or **Browse Marketplace**
+4. Select **Upstash** integration
+5. Click **Add Integration**
+6. Choose a name (e.g., `reetaa-chat-redis`)
+7. Select the region closest to your users
+8. Click **Create Database**
+
+### Option 2: Vercel KV (Legacy)
+
+If you see "KV" in your Vercel Storage options:
 
 1. Go to your Vercel dashboard: https://vercel.com/dashboard
 2. Navigate to **Storage** tab
@@ -30,7 +54,7 @@ Vercel KV is a managed Redis service that provides persistent storage shared acr
 6. Select the region closest to your users
 7. Click **Create**
 
-### Step 2: Connect KV to Your Project
+### Step 2: Connect to Your Project
 
 1. After creating the database, click **Connect Project**
 2. Select your project from the list
@@ -44,7 +68,7 @@ This automatically adds the required environment variables:
 - `KV_REST_API_URL`
 - `KV_REST_API_TOKEN`
 - `KV_REST_API_READ_ONLY_TOKEN`
-- `KV_URL`
+- `KV_URL` (or `UPSTASH_REDIS_REST_URL` for Upstash)
 
 ### Step 3: Install Dependencies (Already Done)
 
@@ -125,32 +149,38 @@ User → Frontend → n8n Webhook
 
 ## 💰 Pricing
 
-Vercel KV Free Tier includes:
+### Upstash Free Tier
+- ✅ **256 MB storage**
+- ✅ **10,000 commands/day**
+- ✅ More than enough for moderate chat usage!
+
+### Vercel KV Free Tier (Legacy)
 - ✅ **256 MB storage**
 - ✅ **30,000 commands/month**
-- ✅ More than enough for chat usage!
 
 For typical chat usage (assuming 100 users/day with 10 messages each):
-- **Storage**: ~1 KB per message × 1,000 messages = ~1 MB (well under 256 MB)
-- **Commands**: ~3,000 commands/day = ~90,000/month (above free tier)
+- **Storage**: ~1 KB per message × 1,000 messages = ~1 MB (well under limits)
+- **Commands**: ~3,000 commands/day
 
-If you exceed the free tier, upgrade to **Pro** ($20/month):
-- **10 GB storage**
-- **Unlimited commands**
+**Both free tiers work well for development and small-to-medium production use.**
+
+If you need more capacity:
+- **Upstash Pay-as-you-go**: Starting at $0.2 per 100K commands
+- **Vercel KV Pro** (legacy): $20/month for unlimited commands
 
 ## 🐛 Troubleshooting
 
 ### Error: "KV_REST_API_URL is not defined"
 
-**Solution**: You haven't connected Vercel KV to your project yet.
+**Solution**: You haven't connected Redis storage to your project yet.
 1. Go to Vercel dashboard
-2. Storage → KV → Connect Project
+2. Storage → (Upstash or KV) → Connect Project
 3. Redeploy your app
 
 ### Messages still not appearing
 
 **Check**:
-1. ✅ Vercel KV is connected to your project
+1. ✅ Redis storage (Upstash or Vercel KV) is connected to your project
 2. ✅ Environment variables are set (check Vercel dashboard → Settings → Environment Variables)
 3. ✅ Latest code is deployed (check git push and Vercel deployment)
 4. ✅ n8n webhook is sending to the correct URL (should be `https://your-app.vercel.app/api/receive-response`)
@@ -171,16 +201,18 @@ This creates a `.env.local` file with your KV credentials.
 
 ## 📚 Additional Resources
 
-- [Vercel KV Documentation](https://vercel.com/docs/storage/vercel-kv)
-- [Vercel KV Quickstart](https://vercel.com/docs/storage/vercel-kv/quickstart)
+- [Upstash Redis Documentation](https://upstash.com/docs/redis)
+- [Vercel + Upstash Integration](https://vercel.com/integrations/upstash)
+- [Vercel KV Documentation (Legacy)](https://vercel.com/docs/storage/vercel-kv)
 - [@vercel/kv SDK Reference](https://vercel.com/docs/storage/vercel-kv/kv-reference)
 
 ## 🎉 Summary
 
 ✅ **Before**: In-memory storage (didn't work in serverless)
-✅ **After**: Vercel KV (Redis) for persistent, shared storage
+✅ **After**: Redis (Upstash or Vercel KV) for persistent, shared storage
 ✅ **Result**: Webhooks now work correctly!
+✅ **Compatibility**: Works with both Upstash and Vercel KV using the same code
 
 ---
 
-**Need Help?** Check the [Vercel KV Documentation](https://vercel.com/docs/storage/vercel-kv) or open an issue.
+**Need Help?** Check the [Upstash Documentation](https://upstash.com/docs/redis) or [Vercel KV Documentation](https://vercel.com/docs/storage/vercel-kv), or open an issue.

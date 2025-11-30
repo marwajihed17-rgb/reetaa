@@ -24,9 +24,10 @@ Frontend ← Polls every 1s ← Vercel /api/get-updates ← Temporary storage
 
 ## 🔧 Prerequisites
 
-1. **Vercel KV (REQUIRED)** - You MUST set this up first!
+1. **Redis Storage (REQUIRED)** - You MUST set this up first!
+   - Use Upstash Redis (recommended) or Vercel KV (legacy)
    - See [VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md) for setup instructions
-   - Without Vercel KV, the webhook will NOT work
+   - Without Redis storage, the webhook will NOT work
 2. **n8n instance** (cloud or self-hosted)
 3. **Vercel deployment** of this app (with API endpoints live)
 4. **Your Vercel app URL** (e.g., `https://your-app.vercel.app`)
