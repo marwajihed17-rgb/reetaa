@@ -96,7 +96,7 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                 key={card.id}
                 onClick={() => canAccess && onNavigate(card.id)}
                 disabled={!canAccess}
-                className={`bg-[#1a1f2e]/80 backdrop-blur-sm border border-[#2a3144] rounded-lg p-6 transition-all group relative ${
+                className={`bg-[#1a1f2e]/80 backdrop-blur-sm border border-[#2a3144] rounded-lg p-6 transition-all group relative overflow-hidden ${
                   canAccess
                     ? 'hover:border-[#3a4154] hover:bg-[#1a1f2e]/90 cursor-pointer'
                     : 'cursor-not-allowed'
@@ -111,8 +111,9 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                     <p className="text-gray-400 text-sm">{card.description}</p>
                   </div>
                 </div>
+                {/* Enhanced blur overlay layer */}
                 {!canAccess && (
-                  <div className="absolute inset-0 bg-gray-500/30 rounded-lg"></div>
+                  <div className="absolute inset-0 bg-gray-500/50 backdrop-blur-md rounded-lg pointer-events-none z-10"></div>
                 )}
               </button>
             );
