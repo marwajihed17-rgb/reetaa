@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, User, Trash2, LogOut, Paperclip, Send } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -21,6 +21,20 @@ export function GAProcessing({ onBack, onLogout }: GAProcessingProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [username, setUsername] = useState<string>('');
+
+  // Get username from localStorage
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setUsername(user.username || '');
+      } catch (error) {
+        console.error('Failed to parse user data:', error);
+      }
+    }
+  }, []);
 
   const handleSend = async () => {
     if (message.trim() || attachments.length > 0) {
@@ -120,13 +134,10 @@ export function GAProcessing({ onBack, onLogout }: GAProcessingProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-[#1a1f2e]"
-            >
+            <div className="flex items-center gap-2 text-white px-3">
               <User className="w-5 h-5" />
-            </Button>
+              <span className="text-sm">{username}</span>
+            </div>
             <Button
               variant="ghost"
               size="icon"
