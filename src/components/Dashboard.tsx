@@ -78,8 +78,8 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-6xl mx-auto">
+      <main className="container mx-auto px-6 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {cards.map((card) => {
             const Icon = card.icon;
             const canAccess = hasAccess(card.moduleKey);
@@ -88,19 +88,19 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                 key={card.id}
                 onClick={() => canAccess && onNavigate(card.id)}
                 disabled={!canAccess}
-                className={`bg-[#1a1f2e]/80 backdrop-blur-sm border border-[#2a3144] rounded-lg p-4 transition-all group relative ${
+                className={`bg-[#1a1f2e]/80 backdrop-blur-sm border border-[#2a3144] rounded-lg p-6 transition-all group relative ${
                   canAccess
                     ? 'hover:border-[#3a4154] hover:bg-[#1a1f2e]/90 cursor-pointer'
                     : 'cursor-not-allowed opacity-60'
                 }`}
               >
-                <div className={`flex flex-col items-center text-center space-y-2 ${!canAccess ? 'blur-sm' : ''}`}>
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#4A90F5] to-[#C74AFF] flex items-center justify-center animated-gradient">
-                    <Icon className="w-5 h-5 text-white" />
+                <div className={`flex flex-col items-center text-center space-y-3 ${!canAccess ? 'blur-sm' : ''}`}>
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#4A90F5] to-[#C74AFF] flex items-center justify-center animated-gradient">
+                    <Icon className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-white text-sm mb-1">{card.title}</h3>
-                    <p className="text-gray-400 text-xs">{card.description}</p>
+                    <h3 className="text-white mb-1">{card.title}</h3>
+                    <p className="text-gray-400 text-sm">{card.description}</p>
                   </div>
                 </div>
                 {!canAccess && (
