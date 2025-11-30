@@ -141,17 +141,23 @@ The application implements module-based access control:
 
 ### Environment Variables on Vercel
 
-After deploying, add the following environment variable in your Vercel project settings:
+After deploying, add the following environment variables in your Vercel project settings:
 
 1. Go to your project on Vercel
 2. Navigate to **Settings** → **Environment Variables**
-3. Add the following variable:
+3. Add **BOTH** of the following variables (use the same URL for both):
 
-   | Name | Value |
-   |------|-------|
-   | `VITE_GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL |
+   | Name | Value | Purpose |
+   |------|-------|---------|
+   | `VITE_GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL | Frontend (build time) |
+   | `GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL | Backend API (runtime) |
 
-4. Click **Save** and redeploy your project
+   **Example URL format:**
+   ```
+   https://docs.google.com/spreadsheets/d/e/2PACX-xxxxx/pub?output=csv
+   ```
+
+4. Click **Save** and **redeploy** your project (redeploy is required for environment variables to take effect)
 
 ## Project Structure
 
