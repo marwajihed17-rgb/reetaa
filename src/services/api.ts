@@ -1,90 +1,174 @@
+import Papa from 'papaparse';
 import type {
   AuthResponse,
   MessageResponse,
   SheetsResponse,
-  Message
+  Message,
+  User,
+  SheetRow
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const GOOGLE_SHEET_URL = import.meta.env.VITE_GOOGLE_SHEET_URL;
 
 class ApiService {
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
-
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    };
-
-    try {
-      const response = await fetch(url, config);
-
-      // Check if response is JSON before parsing
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        throw new Error(text || `Server returned non-JSON response: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || data.message || 'API request failed');
-      }
-
-      return data as T;
-    } catch (error) {
-      console.error(`API Error (${endpoint}):`, error);
-      throw error;
+  // Parse CSV data from Google Sheets
+  private async fetchSheetData(): Promise<SheetRow[]> {
+    if (!GOOGLE_SHEET_URL) {
+      throw new Error('Google Sheets URL not configured');
     }
+
+    const response = await fetch(GOOGLE_SHEET_URL, {
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+    }
+
+    const csvText = await response.text();
+
+    if (!csvText || csvText.trim().length === 0) {
+      throw new Error('Empty response from Google Sheets');
+    }
+
+    // Parse CSV using papaparse
+    const parsed = Papa.parse<SheetRow>(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim().toLowerCase(),
+      transform: (value) => value.trim(),
+    });
+
+    if (parsed.errors.length > 0) {
+      console.warn('CSV parsing errors:', parsed.errors);
+    }
+
+    return parsed.data;
   }
 
   // Authentication
   async login(username: string, password: string): Promise<AuthResponse> {
-    return this.request<AuthResponse>('/auth', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const rows = await this.fetchSheetData();
+
+      if (rows.length === 0) {
+        return {
+          success: false,
+          error: 'No users found'
+        };
+      }
+
+      // Find matching user
+      const matchedRow = rows.find(
+        row => row.username?.toLowerCase() === username.toLowerCase() &&
+               row.password === password
+      );
+
+      if (!matchedRow) {
+        return {
+          success: false,
+          error: 'Invalid username or password'
+        };
+      }
+
+      // Parse modules from comma-separated string to array
+      let modules: string[] = [];
+      if (matchedRow.modules) {
+        try {
+          // Try parsing as JSON array first
+          modules = JSON.parse(matchedRow.modules);
+        } catch {
+          // Fall back to comma-separated values
+          modules = matchedRow.modules
+            .split(',')
+            .map(m => m.trim().toLowerCase())
+            .filter(m => m.length > 0);
+        }
+      }
+
+      // Construct user object without password
+      const user: User = {
+        id: matchedRow.id || '',
+        username: matchedRow.username,
+        modules: modules,
+        role: matchedRow.role,
+        email: matchedRow.email,
+      };
+
+      return {
+        success: true,
+        user: user,
+        token: btoa(`${username}:${Date.now()}`)
+      };
+    } catch (error) {
+      console.error('Authentication error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Authentication failed'
+      };
+    }
   }
 
   // Google Sheets Data
   async getSheetData(): Promise<SheetsResponse> {
-    return this.request<SheetsResponse>('/sheets', {
-      method: 'GET',
-    });
+    try {
+      const data = await this.fetchSheetData();
+
+      return {
+        data,
+        timestamp: new Date().toISOString(),
+        rowCount: data.length
+      };
+    } catch (error) {
+      console.error('Error fetching sheet:', error);
+      throw error;
+    }
   }
 
-  // Messages
+  // Messages (stored locally for now)
   async sendMessage(
     text: string,
     sender: 'user' | 'bot',
     category?: 'invoice' | 'kdr' | 'ga' | 'kdr invoicing',
     userId?: string
   ): Promise<MessageResponse> {
-    return this.request<MessageResponse>('/messages', {
-      method: 'POST',
-      body: JSON.stringify({ text, sender, category, userId }),
-    });
+    // For now, just create a simple bot response
+    const message: Message = {
+      id: Date.now(),
+      text,
+      sender,
+      timestamp: new Date().toISOString(),
+      category,
+      userId
+    };
+
+    const botResponse: Message = {
+      id: Date.now() + 1,
+      text: 'Message received. This is a simple response.',
+      sender: 'bot',
+      timestamp: new Date().toISOString(),
+      category,
+      userId
+    };
+
+    return {
+      success: true,
+      message,
+      botResponse
+    };
   }
 
   async getMessages(
     category?: string,
     userId?: string
   ): Promise<MessageResponse> {
-    const params = new URLSearchParams();
-    if (category) params.append('category', category);
-    if (userId) params.append('userId', userId);
-
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request<MessageResponse>(`/messages${query}`, {
-      method: 'GET',
-    });
+    // For now, return empty messages
+    return {
+      success: true,
+      messages: []
+    };
   }
 }
 
