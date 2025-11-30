@@ -10,7 +10,7 @@ A modern web application for Invoice Processing, KDR Processing, and GA Processi
 - 📈 **GA Processing** - Analytics and reporting automation
 - 🧾 **KDR Invoicing** - KDR invoice management and tracking
 - 🔒 **Module-Based Access Control** - Per-user permissions for different modules
-- 💬 **Real-time Chat** - Interactive messaging interface for all processing modules
+- 💬 **AI Chat with n8n** - Multiple asynchronous AI responses using n8n workflows and polling
 - ☁️ **Cloud Database** - Google Sheets integration for data storage
 - 🎨 **Modern UI** - Beautiful gradient design with animated components
 
@@ -22,6 +22,8 @@ A modern web application for Invoice Processing, KDR Processing, and GA Processi
 - **UI Components**: Radix UI + shadcn/ui
 - **Data Source**: Google Sheets (published CSV)
 - **Deployment**: Vercel
+- **Automation**: n8n (for chat workflows)
+- **Chat Architecture**: Polling-based (Vercel compatible)
 
 ## Getting Started
 
@@ -114,6 +116,64 @@ The application implements module-based access control:
 - **No Errors**: Clicking unauthorized modules does nothing (no error messages shown)
 - **Dynamic**: Access is checked on login and persisted in localStorage
 
+### 💬 Chat Feature with n8n
+
+The application includes a powerful AI chat interface that supports **multiple asynchronous responses** from n8n workflows.
+
+#### Features
+- **Multiple Async Responses**: n8n sends 2, 3, or more responses for a single message
+- **Polling-based**: Compatible with Vercel (no WebSocket/SSE required)
+- **Stateless**: No server-side chat storage - everything in localStorage
+- **Privacy**: Each user isolated by unique sessionId
+- **Real-time Updates**: Frontend polls every 1 second for new messages
+
+#### Quick Setup
+
+1. **Add chat module** to user's modules in Google Sheets:
+   ```csv
+   id,username,password,modules
+   1,admin,admin123,"chat,invoice,kdr,ga"
+   ```
+
+2. **Set up n8n workflow**:
+   - Import `n8n-chat-workflow.json` into n8n
+   - Update the Vercel API URL in the workflow
+   - Activate the workflow
+   - Copy the webhook URL
+
+3. **Configure frontend**:
+   ```bash
+   # Add to .env
+   VITE_N8N_WEBHOOK_URL=https://your-n8n-instance.app.n8n.cloud/webhook/chat
+   ```
+
+   Or set in browser console:
+   ```javascript
+   localStorage.setItem('n8nWebhookUrl', 'your-webhook-url');
+   ```
+
+#### Documentation
+
+- 📘 **[N8N_SETUP_GUIDE.md](./N8N_SETUP_GUIDE.md)** - Complete n8n workflow setup
+- 📗 **[CHAT_FEATURE.md](./CHAT_FEATURE.md)** - Architecture and customization
+- 📙 **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and debugging
+
+#### Architecture
+
+```
+User → Frontend → n8n Webhook
+                     ↓
+              [Multiple HTTP POSTs]
+                     ↓
+         Vercel /api/receive-response
+                     ↓
+            In-Memory Storage
+                     ↓
+     Frontend polls /api/get-updates
+```
+
+See [CHAT_FEATURE.md](./CHAT_FEATURE.md) for detailed architecture diagrams.
+
 ## Deployment to Vercel
 
 ### Quick Deploy
@@ -151,6 +211,7 @@ After deploying, add the following environment variables in your Vercel project 
    |------|-------|---------|
    | `VITE_GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL | Frontend (build time) |
    | `GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL | Backend API (runtime) |
+   | `VITE_N8N_WEBHOOK_URL` | Your n8n webhook URL (optional) | Chat feature |
 
    **Example URL format:**
    ```
@@ -167,6 +228,7 @@ reetaa/
 │   ├── components/          # React components
 │   │   ├── Dashboard.tsx
 │   │   ├── LoginPage.tsx
+│   │   ├── ChatInterface.tsx    # 💬 Chat component
 │   │   ├── InvoiceProcessing.tsx
 │   │   ├── KDRProcessing.tsx
 │   │   ├── GAProcessing.tsx
@@ -178,10 +240,18 @@ reetaa/
 │   │   └── api.ts          # Data types
 │   ├── App.tsx             # Main app component
 │   └── main.tsx            # Entry point
+├── api/                    # Vercel serverless functions
+│   ├── auth.ts            # Authentication API
+│   ├── receive-response.ts # 💬 n8n callback endpoint
+│   └── get-updates.ts     # 💬 Frontend polling endpoint
 ├── .env.example            # Environment variables template
 ├── vercel.json             # Vercel configuration
 ├── vite.config.ts          # Vite configuration
-└── package.json            # Dependencies
+├── package.json            # Dependencies
+├── N8N_SETUP_GUIDE.md     # 💬 n8n workflow setup guide
+├── CHAT_FEATURE.md        # 💬 Chat architecture docs
+├── TESTING_GUIDE.md       # 💬 Testing instructions
+└── n8n-chat-workflow.json # 💬 n8n workflow template
 
 ```
 

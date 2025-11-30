@@ -5,10 +5,11 @@ import { InvoiceProcessing } from "./components/InvoiceProcessing";
 import { KDRProcessing } from "./components/KDRProcessing";
 import { GAProcessing } from "./components/GAProcessing";
 import { KDRInvoicing } from "./components/KDRInvoicing";
+import { ChatInterface } from "./components/ChatInterface";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<
-    "login" | "dashboard" | "invoice" | "kdr" | "ga" | "kdr-invoicing"
+    "login" | "dashboard" | "invoice" | "kdr" | "ga" | "kdr-invoicing" | "chat"
   >("login");
 
   return (
@@ -59,6 +60,12 @@ export default function App() {
         )}
         {currentPage === "kdr-invoicing" && (
           <KDRInvoicing
+            onBack={() => setCurrentPage("dashboard")}
+            onLogout={() => setCurrentPage("login")}
+          />
+        )}
+        {currentPage === "chat" && (
+          <ChatInterface
             onBack={() => setCurrentPage("dashboard")}
             onLogout={() => setCurrentPage("login")}
           />
