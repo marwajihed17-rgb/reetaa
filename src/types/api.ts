@@ -1,7 +1,9 @@
 // API Response Types
 
 export interface User {
+  id: string;
   username: string;
+  modules: string[];
   role?: string;
   email?: string;
 }
@@ -19,7 +21,7 @@ export interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: string;
-  category?: 'invoice' | 'kdr' | 'ga';
+  category?: 'invoice' | 'kdr' | 'ga' | 'kdr invoicing';
   userId?: string;
 }
 

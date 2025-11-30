@@ -1,10 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Papa from 'papaparse';
 
 interface User {
+  id: string;
   username: string;
   password: string;
+  modules: string[];
   role?: string;
   email?: string;
+}
+
+interface SheetRow {
+  id: string;
+  username: string;
+  password: string;
+  modules: string;
+  [key: string]: string;
 }
 
 export default async function handler(
@@ -35,59 +46,104 @@ export default async function handler(
     }
 
     // Fetch users from Google Sheets
-    const sheetUrl = process.env.GOOGLE_SHEET_URL ||
-      'https://docs.google.com/spreadsheets/d/e/2PACX-1vR21vntA5bTAeUWpzEUdGEXLmFUMqjH5LRUT5uPxmq3ipaHWqndB65-dli_kcmlw-jQKgu7Z6ERGeMh/pub?output=csv';
+    const sheetUrl = process.env.GOOGLE_SHEET_URL;
 
-    const response = await fetch(sheetUrl);
+    if (!sheetUrl) {
+      console.error('GOOGLE_SHEET_URL environment variable is not set');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error'
+      });
+    }
+
+    console.log('Fetching users from Google Sheet...');
+
+    const response = await fetch(sheetUrl, {
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch users: ${response.statusText}`);
+      throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
     }
 
     const csvText = await response.text();
 
-    // Parse CSV to find user
-    const rows = csvText.split('\n').filter(row => row.trim());
-    if (rows.length === 0) {
+    if (!csvText || csvText.trim().length === 0) {
+      console.error('Empty CSV response from Google Sheets');
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials'
       });
     }
 
-    const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const users: User[] = [];
+    // Parse CSV using papaparse
+    const parsed = Papa.parse<SheetRow>(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim().toLowerCase(),
+      transform: (value) => value.trim(),
+    });
 
-    for (let i = 1; i < rows.length; i++) {
-      const values = rows[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      const user: any = {};
+    if (parsed.errors.length > 0) {
+      console.error('CSV parsing errors:', parsed.errors);
+    }
 
-      headers.forEach((header, index) => {
-        user[header.toLowerCase()] = values[index] || '';
+    const rows = parsed.data;
+
+    if (rows.length === 0) {
+      console.error('No users found in Google Sheets');
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
       });
-
-      users.push(user);
     }
 
     // Find matching user
-    const user = users.find(
-      u => u.username?.toLowerCase() === username.toLowerCase() &&
-           u.password === password
+    const matchedRow = rows.find(
+      row => row.username?.toLowerCase() === username.toLowerCase() &&
+             row.password === password
     );
 
-    if (!user) {
+    if (!matchedRow) {
+      console.log(`Authentication failed for user: ${username}`);
       return res.status(401).json({
         success: false,
-        error: 'Invalid credentials'
+        error: 'Invalid username or password'
       });
     }
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    // Parse modules from comma-separated string to array
+    let modules: string[] = [];
+    if (matchedRow.modules) {
+      // Handle both comma-separated values and JSON arrays
+      try {
+        // Try parsing as JSON array first
+        modules = JSON.parse(matchedRow.modules);
+      } catch {
+        // Fall back to comma-separated values
+        modules = matchedRow.modules
+          .split(',')
+          .map(m => m.trim().toLowerCase())
+          .filter(m => m.length > 0);
+      }
+    }
+
+    // Construct user object without password
+    const user: Omit<User, 'password'> = {
+      id: matchedRow.id || '',
+      username: matchedRow.username,
+      modules: modules,
+      role: matchedRow.role,
+      email: matchedRow.email,
+    };
+
+    console.log(`User ${username} authenticated successfully with modules:`, modules);
 
     return res.status(200).json({
       success: true,
-      user: userWithoutPassword,
+      user: user,
       token: Buffer.from(`${username}:${Date.now()}`).toString('base64')
     });
 

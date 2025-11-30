@@ -8,6 +8,8 @@ A modern web application for Invoice Processing, KDR Processing, and GA Processi
 - 📊 **Invoice Processing** - Automated invoice handling and processing
 - 📦 **KDR Processing** - Efficient KDR workflow management
 - 📈 **GA Processing** - Analytics and reporting automation
+- 🧾 **KDR Invoicing** - KDR invoice management and tracking
+- 🔒 **Module-Based Access Control** - Per-user permissions for different modules
 - 💬 **Real-time Chat** - Interactive messaging interface for all processing modules
 - ☁️ **Cloud Database** - Google Sheets integration for data storage
 - 🎨 **Modern UI** - Beautiful gradient design with animated components
@@ -68,10 +70,30 @@ To use Google Sheets as your database:
 
 1. **Create a Google Sheet** with the following structure for users:
 
-   | username | password | role | email |
-   |----------|----------|------|-------|
-   | admin    | admin123 | admin| admin@example.com |
-   | user1    | pass123  | user | user1@example.com |
+   **Required Columns:**
+   | id | username | password | modules |
+   |----|----------|----------|---------|
+   | 1  | admin    | admin123 | invoice,kdr,ga,kdr invoicing |
+   | 2  | user1    | pass123  | invoice,kdr |
+   | 3  | user2    | pass456  | ga,kdr invoicing |
+
+   **Optional Columns:**
+   | role | email |
+   |------|-------|
+   | admin| admin@example.com |
+   | user | user1@example.com |
+   | user | user2@example.com |
+
+   **Important Notes:**
+   - `id`: Unique identifier for each user
+   - `username`: Login username (case-insensitive)
+   - `password`: Plain-text password (⚠️ use hashing in production)
+   - `modules`: Comma-separated list of modules the user can access
+     - Available modules: `invoice`, `kdr`, `ga`, `kdr invoicing`
+     - Example: `"invoice,kdr,ga"` gives access to 3 modules
+     - Example: `"kdr invoicing"` gives access to only KDR Invoicing
+   - `role` (optional): User role for additional metadata
+   - `email` (optional): User email address
 
 2. **Publish the sheet to the web**:
    - Go to **File** → **Share** → **Publish to web**
@@ -83,6 +105,15 @@ To use Google Sheets as your database:
 3. **Add the URL to your environment variables**:
    - Update `GOOGLE_SHEET_URL` in your `.env` file
    - For Vercel deployment, add it to your Vercel project settings
+
+### Module Access Control
+
+The application implements module-based access control:
+
+- **Authorized Modules**: Users can click and access modules listed in their `modules` column
+- **Unauthorized Modules**: Appear blurred/disabled with a "No Access" badge
+- **No Errors**: Clicking unauthorized modules does nothing (no error messages shown)
+- **Dynamic**: Access is checked on login and persisted in localStorage
 
 ## Deployment to Vercel
 
@@ -141,6 +172,7 @@ reetaa/
 │   │   ├── InvoiceProcessing.tsx
 │   │   ├── KDRProcessing.tsx
 │   │   ├── GAProcessing.tsx
+│   │   ├── KDRInvoicing.tsx
 │   │   └── ui/             # UI components (shadcn)
 │   ├── services/           # API services
 │   │   └── api.ts          # API client
@@ -243,8 +275,10 @@ To customize the branding:
 
 ### Authentication Not Working
 - Verify Google Sheets URL is correct and publicly accessible
-- Check that the sheet has the correct column headers (username, password)
-- Ensure environment variables are set correctly
+- Check that the sheet has the correct column headers: `id`, `username`, `password`, `modules`
+- Ensure the `modules` column contains comma-separated module names (e.g., "invoice,kdr")
+- Verify environment variables are set correctly in both `.env` and Vercel settings
+- Check browser console for detailed error messages
 
 ### API Routes Not Working on Vercel
 - Verify `vercel.json` is properly configured

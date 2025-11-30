@@ -4,10 +4,11 @@ import { Dashboard } from "./components/Dashboard";
 import { InvoiceProcessing } from "./components/InvoiceProcessing";
 import { KDRProcessing } from "./components/KDRProcessing";
 import { GAProcessing } from "./components/GAProcessing";
+import { KDRInvoicing } from "./components/KDRInvoicing";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<
-    "login" | "dashboard" | "invoice" | "kdr" | "ga"
+    "login" | "dashboard" | "invoice" | "kdr" | "ga" | "kdr-invoicing"
   >("login");
 
   return (
@@ -52,6 +53,12 @@ export default function App() {
         )}
         {currentPage === "ga" && (
           <GAProcessing
+            onBack={() => setCurrentPage("dashboard")}
+            onLogout={() => setCurrentPage("login")}
+          />
+        )}
+        {currentPage === "kdr-invoicing" && (
+          <KDRInvoicing
             onBack={() => setCurrentPage("dashboard")}
             onLogout={() => setCurrentPage("login")}
           />
