@@ -31,8 +31,8 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
     {
       id: 'invoice' as const,
       icon: FileText,
-      title: 'Invoice Processing',
-      description: 'Process invoices with n8n automation',
+      title: 'Invoice with Automation',
+      description: 'Automated invoice processing',
       moduleKey: 'invoice',
     },
     {
@@ -99,7 +99,7 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                 className={`bg-[#1a1f2e]/80 backdrop-blur-sm border border-[#2a3144] rounded-lg p-6 transition-all group relative ${
                   canAccess
                     ? 'hover:border-[#3a4154] hover:bg-[#1a1f2e]/90 cursor-pointer'
-                    : 'cursor-not-allowed opacity-60'
+                    : 'cursor-not-allowed'
                 }`}
               >
                 <div className={`flex flex-col items-center text-center space-y-3 ${!canAccess ? 'blur-sm' : ''}`}>
@@ -112,11 +112,7 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                   </div>
                 </div>
                 {!canAccess && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-1">
-                      <p className="text-red-400 text-xs font-medium">No Access</p>
-                    </div>
-                  </div>
+                  <div className="absolute inset-0 bg-gray-500/30 rounded-lg"></div>
                 )}
               </button>
             );
