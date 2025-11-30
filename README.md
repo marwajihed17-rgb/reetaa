@@ -20,8 +20,7 @@ A modern web application for Invoice Processing, KDR Processing, and GA Processi
 - **Build Tool**: Vite
 - **Styling**: Tailwind CSS
 - **UI Components**: Radix UI + shadcn/ui
-- **Backend**: Vercel Serverless Functions
-- **Database**: Google Sheets (CSV export)
+- **Data Source**: Google Sheets (published CSV)
 - **Deployment**: Vercel
 
 ## Getting Started
@@ -54,7 +53,7 @@ A modern web application for Invoice Processing, KDR Processing, and GA Processi
 
    Update the `.env` file with your Google Sheets URL:
    ```env
-   GOOGLE_SHEET_URL=your-google-sheet-csv-url
+   VITE_GOOGLE_SHEET_URL=your-google-sheet-csv-url
    ```
 
 4. **Run the development server**
@@ -103,7 +102,7 @@ To use Google Sheets as your database:
    - Copy the generated URL
 
 3. **Add the URL to your environment variables**:
-   - Update `GOOGLE_SHEET_URL` in your `.env` file
+   - Update `VITE_GOOGLE_SHEET_URL` in your `.env` file
    - For Vercel deployment, add it to your Vercel project settings
 
 ### Module Access Control
@@ -142,18 +141,15 @@ The application implements module-based access control:
 
 ### Environment Variables on Vercel
 
-After deploying, add the following environment variables in your Vercel project settings:
+After deploying, add the following environment variable in your Vercel project settings:
 
 1. Go to your project on Vercel
 2. Navigate to **Settings** → **Environment Variables**
-3. Add the following variables:
+3. Add the following variable:
 
    | Name | Value |
    |------|-------|
-   | `GOOGLE_SHEET_URL` | Your Google Sheets CSV export URL |
-   | `VITE_API_BASE_URL` | `/api` |
-   | `VITE_APP_NAME` | `PAA Solutions Tool` |
-   | `VITE_APP_URL` | `https://www.paa-solutions.com` |
+   | `VITE_GOOGLE_SHEET_URL` | Your Google Sheets published CSV URL |
 
 4. Click **Save** and redeploy your project
 
@@ -161,10 +157,6 @@ After deploying, add the following environment variables in your Vercel project 
 
 ```
 reetaa/
-├── api/                      # Vercel serverless functions
-│   ├── auth.ts              # Authentication API
-│   ├── sheets.ts            # Google Sheets data API
-│   └── messages.ts          # Message handling API
 ├── src/
 │   ├── components/          # React components
 │   │   ├── Dashboard.tsx
@@ -174,10 +166,10 @@ reetaa/
 │   │   ├── GAProcessing.tsx
 │   │   ├── KDRInvoicing.tsx
 │   │   └── ui/             # UI components (shadcn)
-│   ├── services/           # API services
-│   │   └── api.ts          # API client
+│   ├── services/           # Services
+│   │   └── api.ts          # Google Sheets client
 │   ├── types/              # TypeScript types
-│   │   └── api.ts          # API response types
+│   │   └── api.ts          # Data types
 │   ├── App.tsx             # Main app component
 │   └── main.tsx            # Entry point
 ├── .env.example            # Environment variables template
@@ -187,31 +179,21 @@ reetaa/
 
 ```
 
-## API Endpoints
+## How It Works
 
-### Authentication
-- `POST /api/auth` - Authenticate user with username and password
-  ```json
-  {
-    "username": "admin",
-    "password": "admin123"
-  }
-  ```
+The application fetches data directly from a published Google Sheets CSV URL:
 
-### Google Sheets
-- `GET /api/sheets` - Fetch all data from Google Sheets
+1. **Authentication**:
+   - User credentials are validated against the Google Sheet
+   - Fetches CSV data from the published URL
+   - Parses user data and validates username/password
+   - Returns user object with module permissions
 
-### Messages
-- `POST /api/messages` - Send a new message
-  ```json
-  {
-    "text": "Hello",
-    "sender": "user",
-    "category": "invoice",
-    "userId": "admin"
-  }
-  ```
-- `GET /api/messages?category=invoice&userId=admin` - Retrieve messages
+2. **Data Access**:
+   - All data is fetched directly from Google Sheets
+   - No backend API required
+   - Simple CSV parsing using PapaParse
+   - Real-time data updates when sheet is modified
 
 ## Build Commands
 
@@ -226,8 +208,7 @@ reetaa/
 
 The `vercel.json` file contains:
 - Build settings (output directory, framework)
-- API route rewrites
-- CORS headers for API endpoints
+- SPA routing configuration
 
 ### Vite Configuration
 
