@@ -64,7 +64,7 @@ class ApiService {
   async sendMessage(
     text: string,
     sender: 'user' | 'bot',
-    category?: 'invoice' | 'kdr' | 'ga',
+    category?: 'invoice' | 'kdr' | 'ga' | 'kdr invoicing',
     userId?: string
   ): Promise<MessageResponse> {
     return this.request<MessageResponse>('/messages', {

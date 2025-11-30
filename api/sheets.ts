@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Papa from 'papaparse';
 
 interface SheetRow {
   [key: string]: string;
@@ -22,36 +23,51 @@ export default async function handler(
   }
 
   try {
-    const sheetUrl = process.env.GOOGLE_SHEET_URL ||
-      'https://docs.google.com/spreadsheets/d/e/2PACX-1vR21vntA5bTAeUWpzEUdGEXLmFUMqjH5LRUT5uPxmq3ipaHWqndB65-dli_kcmlw-jQKgu7Z6ERGeMh/pub?output=csv';
+    const sheetUrl = process.env.GOOGLE_SHEET_URL;
 
-    const response = await fetch(sheetUrl);
+    if (!sheetUrl) {
+      console.error('GOOGLE_SHEET_URL environment variable is not set');
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'Google Sheets URL not configured'
+      });
+    }
+
+    console.log('Fetching Google Sheet from:', sheetUrl);
+
+    const response = await fetch(sheetUrl, {
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch sheet: ${response.statusText}`);
+      throw new Error(`Failed to fetch sheet: ${response.status} ${response.statusText}`);
     }
 
     const csvText = await response.text();
 
-    // Parse CSV to JSON
-    const rows = csvText.split('\n').filter(row => row.trim());
-    if (rows.length === 0) {
-      return res.status(200).json({ data: [] });
+    if (!csvText || csvText.trim().length === 0) {
+      console.warn('Empty CSV response from Google Sheets');
+      return res.status(200).json({ data: [], timestamp: new Date().toISOString(), rowCount: 0 });
     }
 
-    const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const data: SheetRow[] = [];
+    // Parse CSV using papaparse for robust handling
+    const parsed = Papa.parse<SheetRow>(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim().toLowerCase(),
+      transform: (value) => value.trim(),
+    });
 
-    for (let i = 1; i < rows.length; i++) {
-      const values = rows[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      const row: SheetRow = {};
-
-      headers.forEach((header, index) => {
-        row[header] = values[index] || '';
-      });
-
-      data.push(row);
+    if (parsed.errors.length > 0) {
+      console.error('CSV parsing errors:', parsed.errors);
+      // Continue anyway if we have some data
     }
+
+    const data = parsed.data;
+
+    console.log(`Successfully parsed ${data.length} rows from Google Sheets`);
 
     return res.status(200).json({
       data,
