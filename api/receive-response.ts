@@ -59,25 +59,47 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // Set response headers first to ensure they're always set
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
+
   try {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    console.log('[receive-response] Request received:', {
+      method: req.method,
+      contentType: req.headers['content-type'],
+      bodyType: typeof req.body,
+      hasBody: !!req.body
+    });
 
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
     }
 
     if (req.method !== 'POST') {
+      console.error('[receive-response] Invalid method:', req.method);
       return res.status(405).json({
         success: false,
         error: 'Method not allowed'
       });
     }
 
+    // Validate request body exists and is an object
+    if (!req.body || typeof req.body !== 'object') {
+      console.error('[receive-response] Invalid or missing request body:', {
+        bodyType: typeof req.body,
+        body: req.body
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request body',
+        message: 'Request body must be a valid JSON object'
+      });
+    }
+
     // Parse and validate request body
-    const { sessionId, reply } = req.body || {};
+    const { sessionId, reply } = req.body;
 
     // Validate required fields
     if (!sessionId || typeof sessionId !== 'string' || sessionId.trim().length === 0) {
@@ -215,16 +237,60 @@ export default async function handler(
   } catch (error) {
     // Top-level error handler for any unexpected errors
     console.error('[receive-response] Unexpected error:', error);
+    console.error('[receive-response] Error type:', error?.constructor?.name);
     console.error('[receive-response] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('[receive-response] Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      cause: error instanceof Error ? error.cause : undefined
+    });
 
     // Check if error is related to KV configuration
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isKVError = errorMessage.includes('KV') || errorMessage.includes('Redis') || errorMessage.includes('connection');
+    const isTimeoutError = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT');
+    const isNetworkError = errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ETIMEDOUT');
 
+    // Ensure response hasn't been sent yet
+    if (res.headersSent) {
+      console.error('[receive-response] Headers already sent, cannot send error response');
+      return;
+    }
+
+    // Return appropriate error response based on error type
+    if (isTimeoutError) {
+      return res.status(503).json({
+        success: false,
+        error: 'Service timeout',
+        message: 'The request timed out. Please try again.'
+      });
+    }
+
+    if (isNetworkError) {
+      return res.status(503).json({
+        success: false,
+        error: 'Network error',
+        message: 'Unable to connect to storage service. Please try again later.'
+      });
+    }
+
+    if (isKVError) {
+      return res.status(503).json({
+        success: false,
+        error: 'Storage service error',
+        message: errorMessage
+      });
+    }
+
+    // Generic 500 error for other cases
     return res.status(500).json({
       success: false,
-      error: isKVError ? 'Storage service error' : 'Internal server error',
-      message: errorMessage
+      error: 'Internal server error',
+      message: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? {
+        type: error?.constructor?.name,
+        stack: error instanceof Error ? error.stack : undefined
+      } : undefined
     });
   }
 }
