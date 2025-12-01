@@ -1,10 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
 
 interface ChatMessage {
   sessionId: string;
   reply: string;
   timestamp: number;
+}
+
+// Check if KV is configured
+function isKVConfigured(): boolean {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+// Lazy load KV only when configured
+async function getKV() {
+  if (!isKVConfigured()) {
+    throw new Error('Vercel KV is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN environment variables.');
+  }
+  const { kv } = await import('@vercel/kv');
+  return kv;
 }
 
 export default async function handler(
@@ -34,13 +47,29 @@ export default async function handler(
       });
     }
 
+    // Check if KV is configured before attempting to use it
+    if (!isKVConfigured()) {
+      console.error('[get-updates] KV not configured');
+      return res.status(503).json({
+        success: false,
+        error: 'Service temporarily unavailable',
+        message: 'Message storage is not configured. Please contact the administrator.',
+        messages: [],
+        count: 0
+      });
+    }
+
     // Get messages for this sessionId from Redis
     const key = `chat:${sessionId}`;
-    const messages = await kv.get<ChatMessage[]>(key) || [];
+
+    // Get KV instance
+    const kvStore = await getKV();
+
+    const messages = await kvStore.get<ChatMessage[]>(key) || [];
 
     // Immediately clear messages after retrieving
     if (messages.length > 0) {
-      await kv.del(key);
+      await kvStore.del(key);
       console.log(`[get-updates] Retrieved and cleared ${messages.length} messages for session ${sessionId}`);
     }
 
@@ -58,10 +87,16 @@ export default async function handler(
 
   } catch (error) {
     console.error('[get-updates] Error:', error);
+
+    // Check if error is related to KV configuration
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isKVError = errorMessage.includes('KV') || errorMessage.includes('Redis') || errorMessage.includes('connection');
+
     return res.status(500).json({
       success: false,
-      error: 'Failed to retrieve messages',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: isKVError ? 'Storage service error' : 'Failed to retrieve messages',
+      message: errorMessage,
+      details: 'Please check that Vercel KV is properly configured with KV_REST_API_URL and KV_REST_API_TOKEN'
     });
   }
 }
