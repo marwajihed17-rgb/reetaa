@@ -113,8 +113,9 @@ export default async function handler(
     // Get Pusher instance
     const pusher = getPusher();
 
-    // Create the channel name based on sessionId
-    const channelName = `chat-${sessionId.trim()}`;
+    // Create the private channel name based on sessionId
+    // Private channels in Pusher must be prefixed with "private-"
+    const channelName = `private-bot-${sessionId.trim()}`;
 
     // Publish the event to Pusher
     console.log(`[receive-response] Publishing message to channel ${channelName}`);
