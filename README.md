@@ -129,11 +129,12 @@ The application includes a powerful AI chat interface that supports **multiple a
 
 #### Quick Setup
 
-1. **Set up Vercel KV (REQUIRED)**:
-   - Go to Vercel dashboard → Storage → Create Database → KV
-   - Connect the KV database to your project
+1. **Set up Redis Storage (REQUIRED)**:
+   - Go to Vercel dashboard → Storage → Create Database
+   - Choose **Upstash Redis** (recommended) or **KV** (legacy)
+   - Connect the database to your project
    - See [VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md) for detailed instructions
-   - **⚠️ Without Vercel KV, the webhook feature will NOT work!**
+   - **⚠️ Without Redis storage, the webhook feature will NOT work!**
 
 2. **Add chat module** to user's modules in Google Sheets:
    ```csv
@@ -160,7 +161,7 @@ The application includes a powerful AI chat interface that supports **multiple a
 
 #### Documentation
 
-- 🔴 **[VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md)** - **REQUIRED: Vercel KV setup (must do first!)**
+- 🔴 **[VERCEL_KV_SETUP.md](./VERCEL_KV_SETUP.md)** - **REQUIRED: Redis storage setup (Upstash/KV - must do first!)**
 - 📘 **[N8N_SETUP_GUIDE.md](./N8N_SETUP_GUIDE.md)** - Complete n8n workflow setup
 - 📗 **[CHAT_FEATURE.md](./CHAT_FEATURE.md)** - Architecture and customization
 - 📙 **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Testing and debugging
