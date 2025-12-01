@@ -1,60 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Pusher from 'pusher';
 
-interface ChatMessage {
-  sessionId: string;
-  reply: string;
-  timestamp: number;
-}
-
-// TTL for messages in Redis (5 minutes in seconds)
-const MESSAGE_TTL = 5 * 60;
-
-// Timeout for KV operations (10 seconds)
-const KV_OPERATION_TIMEOUT = 10000;
-
-// Check if KV is configured (supports both Vercel KV and Upstash Redis)
-function isKVConfigured(): boolean {
-  const hasVercelKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-  const hasUpstash = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-  return hasVercelKV || hasUpstash;
-}
-
-// Timeout wrapper for promises
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  errorMessage: string
-): Promise<T> {
-  let timeoutId: NodeJS.Timeout;
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(errorMessage));
-    }, timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    clearTimeout(timeoutId!);
-    return result;
-  } catch (error) {
-    clearTimeout(timeoutId!);
-    throw error;
-  }
-}
-
-// Lazy load KV only when configured
-async function getKV() {
-  if (!isKVConfigured()) {
-    throw new Error('Redis is not configured. Please set either KV_REST_API_URL/KV_REST_API_TOKEN (Vercel KV) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN (Upstash) environment variables.');
-  }
-
-  const { kv } = await withTimeout(
-    import('@vercel/kv'),
-    KV_OPERATION_TIMEOUT,
-    'KV connection timeout'
+// Check if Pusher is configured
+function isPusherConfigured(): boolean {
+  return !!(
+    process.env.PUSHER_APP_ID &&
+    process.env.PUSHER_KEY &&
+    process.env.PUSHER_SECRET &&
+    process.env.PUSHER_CLUSTER
   );
-  return kv;
+}
+
+// Get Pusher instance
+function getPusher(): Pusher {
+  if (!isPusherConfigured()) {
+    throw new Error(
+      'Pusher is not configured. Please set PUSHER_APP_ID, PUSHER_KEY, PUSHER_SECRET, and PUSHER_CLUSTER environment variables.'
+    );
+  }
+
+  return new Pusher({
+    appId: process.env.PUSHER_APP_ID!,
+    key: process.env.PUSHER_KEY!,
+    secret: process.env.PUSHER_SECRET!,
+    cluster: process.env.PUSHER_CLUSTER!,
+    useTLS: true
+  });
 }
 
 export default async function handler(
@@ -129,112 +100,48 @@ export default async function handler(
       });
     }
 
-    // Check if KV is configured before attempting to use it
-    if (!isKVConfigured()) {
-      console.error('[receive-response] KV not configured');
+    // Check if Pusher is configured
+    if (!isPusherConfigured()) {
+      console.error('[receive-response] Pusher not configured');
       return res.status(503).json({
         success: false,
         error: 'Service temporarily unavailable',
-        message: 'Message storage is not configured. Please contact the administrator.'
+        message: 'Pusher is not configured. Please contact the administrator.'
       });
     }
 
-    // Create message object
-    const message: ChatMessage = {
-      sessionId: sessionId.trim(),
-      reply,
-      timestamp: Date.now()
-    };
+    // Get Pusher instance
+    const pusher = getPusher();
 
-    // Store message in Redis with automatic TTL
-    const key = `chat:${sessionId.trim()}`;
+    // Create the channel name based on sessionId
+    const channelName = `chat-${sessionId.trim()}`;
 
-    console.log(`[receive-response] Attempting to store message for session ${sessionId}`);
+    // Publish the event to Pusher
+    console.log(`[receive-response] Publishing message to channel ${channelName}`);
 
-    // Get KV instance
-    let kvStore;
     try {
-      kvStore = await getKV();
-    } catch (kvError) {
-      console.error('[receive-response] Failed to get KV instance:', kvError);
-      return res.status(503).json({
-        success: false,
-        error: 'Storage service unavailable',
-        message: kvError instanceof Error ? kvError.message : 'Failed to connect to storage'
+      await pusher.trigger(channelName, 'new-message', {
+        sessionId: sessionId.trim(),
+        reply,
+        timestamp: Date.now()
       });
-    }
 
-    // Get existing messages for this session with better error handling and timeout protection
-    let existingMessages: ChatMessage[] = [];
-    try {
-      const retrieved = await withTimeout(
-        kvStore.get<ChatMessage[]>(key),
-        KV_OPERATION_TIMEOUT,
-        'KV get operation timeout'
-      );
+      console.log(`[receive-response] Successfully published message for session ${sessionId}: ${reply.substring(0, 50)}...`);
 
-      // Ensure we always work with an array
-      if (retrieved === null || retrieved === undefined) {
-        existingMessages = [];
-      } else if (Array.isArray(retrieved)) {
-        existingMessages = retrieved;
-      } else {
-        // If data is corrupted (not an array), log and reset
-        console.warn(`[receive-response] Corrupted data in KV for key ${key}, resetting to empty array`);
-        existingMessages = [];
-      }
-    } catch (getError) {
-      console.error('[receive-response] Error retrieving from KV:', getError);
-      const errorMessage = getError instanceof Error ? getError.message : 'Unknown error';
-
-      // If it's a timeout error, return 503
-      if (errorMessage.includes('timeout')) {
-        return res.status(503).json({
-          success: false,
-          error: 'Storage service timeout',
-          message: 'The storage service is not responding. Please try again.'
-        });
-      }
-
-      // For other errors, continue with empty array
-      existingMessages = [];
-    }
-
-    // Add new message
-    existingMessages.push(message);
-
-    // Store back with TTL (messages auto-expire after 5 minutes) and timeout protection
-    try {
-      await withTimeout(
-        kvStore.set(key, existingMessages, { ex: MESSAGE_TTL }),
-        KV_OPERATION_TIMEOUT,
-        'KV set operation timeout'
-      );
-      console.log(`[receive-response] Successfully stored message for session ${sessionId}: ${reply.substring(0, 50)}...`);
-    } catch (setError) {
-      console.error('[receive-response] Error storing to KV:', setError);
-      const errorMessage = setError instanceof Error ? setError.message : 'Unknown error';
-
-      // Check if it's a timeout error
-      if (errorMessage.includes('timeout')) {
-        return res.status(503).json({
-          success: false,
-          error: 'Storage service timeout',
-          message: 'The storage service is not responding. Please try again.'
-        });
-      }
+      return res.status(200).json({
+        success: true,
+        message: 'Message published successfully'
+      });
+    } catch (pusherError) {
+      console.error('[receive-response] Error publishing to Pusher:', pusherError);
+      const errorMessage = pusherError instanceof Error ? pusherError.message : 'Unknown error';
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to store message',
+        error: 'Failed to publish message',
         message: errorMessage
       });
     }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Message stored successfully'
-    });
 
   } catch (error) {
     // Top-level error handler for any unexpected errors
@@ -247,44 +154,14 @@ export default async function handler(
       cause: error instanceof Error ? error.cause : undefined
     });
 
-    // Check if error is related to KV configuration
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isKVError = errorMessage.includes('KV') || errorMessage.includes('Redis') || errorMessage.includes('connection');
-    const isTimeoutError = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT');
-    const isNetworkError = errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ETIMEDOUT');
-
     // Ensure response hasn't been sent yet
     if (res.headersSent) {
       console.error('[receive-response] Headers already sent, cannot send error response');
       return;
     }
 
-    // Return appropriate error response based on error type
-    if (isTimeoutError) {
-      return res.status(503).json({
-        success: false,
-        error: 'Service timeout',
-        message: 'The request timed out. Please try again.'
-      });
-    }
-
-    if (isNetworkError) {
-      return res.status(503).json({
-        success: false,
-        error: 'Network error',
-        message: 'Unable to connect to storage service. Please try again later.'
-      });
-    }
-
-    if (isKVError) {
-      return res.status(503).json({
-        success: false,
-        error: 'Storage service error',
-        message: errorMessage
-      });
-    }
-
-    // Generic 500 error for other cases
+    // Return error response
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       success: false,
       error: 'Internal server error',
