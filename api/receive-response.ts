@@ -12,9 +12,11 @@ const MESSAGE_TTL = 5 * 60;
 // Timeout for KV operations (10 seconds)
 const KV_OPERATION_TIMEOUT = 10000;
 
-// Check if KV is configured
+// Check if KV is configured (supports both Vercel KV and Upstash Redis)
 function isKVConfigured(): boolean {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  const hasVercelKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  const hasUpstash = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  return hasVercelKV || hasUpstash;
 }
 
 // Timeout wrapper for promises
@@ -44,7 +46,7 @@ async function withTimeout<T>(
 // Lazy load KV only when configured
 async function getKV() {
   if (!isKVConfigured()) {
-    throw new Error('Vercel KV is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN environment variables.');
+    throw new Error('Redis is not configured. Please set either KV_REST_API_URL/KV_REST_API_TOKEN (Vercel KV) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN (Upstash) environment variables.');
   }
 
   const { kv } = await withTimeout(
