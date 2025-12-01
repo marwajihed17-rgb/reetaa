@@ -6,9 +6,36 @@ interface ChatMessage {
   timestamp: number;
 }
 
+// Timeout for KV operations (10 seconds)
+const KV_OPERATION_TIMEOUT = 10000;
+
 // Check if KV is configured
 function isKVConfigured(): boolean {
   return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+// Timeout wrapper for promises
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
 }
 
 // Lazy load KV only when configured
@@ -16,7 +43,12 @@ async function getKV() {
   if (!isKVConfigured()) {
     throw new Error('Vercel KV is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN environment variables.');
   }
-  const { kv } = await import('@vercel/kv');
+
+  const { kv } = await withTimeout(
+    import('@vercel/kv'),
+    KV_OPERATION_TIMEOUT,
+    'KV connection timeout'
+  );
   return kv;
 }
 
@@ -97,10 +129,14 @@ export default async function handler(
       });
     }
 
-    // Get messages with better error handling
+    // Get messages with better error handling and timeout protection
     let messages: ChatMessage[] = [];
     try {
-      const retrieved = await kvStore.get<ChatMessage[]>(key);
+      const retrieved = await withTimeout(
+        kvStore.get<ChatMessage[]>(key),
+        KV_OPERATION_TIMEOUT,
+        'KV get operation timeout'
+      );
 
       // Ensure we always work with an array
       if (retrieved === null || retrieved === undefined) {
@@ -114,7 +150,20 @@ export default async function handler(
       }
     } catch (getError) {
       console.error('[get-updates] Error retrieving from KV:', getError);
-      // Return empty array if retrieval fails
+      const errorMessage = getError instanceof Error ? getError.message : 'Unknown error';
+
+      // If it's a timeout error, return 503
+      if (errorMessage.includes('timeout')) {
+        return res.status(503).json({
+          success: false,
+          error: 'Storage service timeout',
+          message: 'The storage service is not responding. Please try again.',
+          messages: [],
+          count: 0
+        });
+      }
+
+      // For other errors, return empty array with success
       return res.status(200).json({
         success: true,
         messages: [],
@@ -125,7 +174,11 @@ export default async function handler(
     // Immediately clear messages after retrieving
     if (messages.length > 0) {
       try {
-        await kvStore.del(key);
+        await withTimeout(
+          kvStore.del(key),
+          KV_OPERATION_TIMEOUT,
+          'KV delete operation timeout'
+        );
         console.log(`[get-updates] Retrieved and cleared ${messages.length} messages for session ${sessionId}`);
       } catch (delError) {
         console.error('[get-updates] Error deleting from KV:', delError);

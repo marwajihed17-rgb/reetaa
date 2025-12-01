@@ -9,9 +9,36 @@ interface ChatMessage {
 // TTL for messages in Redis (5 minutes in seconds)
 const MESSAGE_TTL = 5 * 60;
 
+// Timeout for KV operations (10 seconds)
+const KV_OPERATION_TIMEOUT = 10000;
+
 // Check if KV is configured
 function isKVConfigured(): boolean {
   return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+// Timeout wrapper for promises
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
 }
 
 // Lazy load KV only when configured
@@ -19,7 +46,12 @@ async function getKV() {
   if (!isKVConfigured()) {
     throw new Error('Vercel KV is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN environment variables.');
   }
-  const { kv } = await import('@vercel/kv');
+
+  const { kv } = await withTimeout(
+    import('@vercel/kv'),
+    KV_OPERATION_TIMEOUT,
+    'KV connection timeout'
+  );
   return kv;
 }
 
@@ -108,10 +140,14 @@ export default async function handler(
       });
     }
 
-    // Get existing messages for this session with better error handling
+    // Get existing messages for this session with better error handling and timeout protection
     let existingMessages: ChatMessage[] = [];
     try {
-      const retrieved = await kvStore.get<ChatMessage[]>(key);
+      const retrieved = await withTimeout(
+        kvStore.get<ChatMessage[]>(key),
+        KV_OPERATION_TIMEOUT,
+        'KV get operation timeout'
+      );
 
       // Ensure we always work with an array
       if (retrieved === null || retrieved === undefined) {
@@ -125,23 +161,49 @@ export default async function handler(
       }
     } catch (getError) {
       console.error('[receive-response] Error retrieving from KV:', getError);
-      // Continue with empty array if retrieval fails
+      const errorMessage = getError instanceof Error ? getError.message : 'Unknown error';
+
+      // If it's a timeout error, return 503
+      if (errorMessage.includes('timeout')) {
+        return res.status(503).json({
+          success: false,
+          error: 'Storage service timeout',
+          message: 'The storage service is not responding. Please try again.'
+        });
+      }
+
+      // For other errors, continue with empty array
       existingMessages = [];
     }
 
     // Add new message
     existingMessages.push(message);
 
-    // Store back with TTL (messages auto-expire after 5 minutes)
+    // Store back with TTL (messages auto-expire after 5 minutes) and timeout protection
     try {
-      await kvStore.set(key, existingMessages, { ex: MESSAGE_TTL });
+      await withTimeout(
+        kvStore.set(key, existingMessages, { ex: MESSAGE_TTL }),
+        KV_OPERATION_TIMEOUT,
+        'KV set operation timeout'
+      );
       console.log(`[receive-response] Successfully stored message for session ${sessionId}: ${reply.substring(0, 50)}...`);
     } catch (setError) {
       console.error('[receive-response] Error storing to KV:', setError);
+      const errorMessage = setError instanceof Error ? setError.message : 'Unknown error';
+
+      // Check if it's a timeout error
+      if (errorMessage.includes('timeout')) {
+        return res.status(503).json({
+          success: false,
+          error: 'Storage service timeout',
+          message: 'The storage service is not responding. Please try again.'
+        });
+      }
+
       return res.status(500).json({
         success: false,
         error: 'Failed to store message',
-        message: setError instanceof Error ? setError.message : 'Storage operation failed'
+        message: errorMessage
       });
     }
 
