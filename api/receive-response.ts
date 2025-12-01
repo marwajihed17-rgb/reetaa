@@ -27,26 +27,49 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    const { sessionId, reply } = req.body;
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (!sessionId || !reply) {
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        success: false,
+        error: 'Method not allowed'
+      });
+    }
+
+    // Parse and validate request body
+    const { sessionId, reply } = req.body || {};
+
+    // Validate required fields
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim().length === 0) {
+      console.error('[receive-response] Invalid sessionId:', sessionId);
       return res.status(400).json({
         success: false,
-        error: 'sessionId and reply are required'
+        error: 'Valid sessionId is required'
+      });
+    }
+
+    if (!reply || typeof reply !== 'string') {
+      console.error('[receive-response] Invalid reply:', reply);
+      return res.status(400).json({
+        success: false,
+        error: 'Valid reply is required'
+      });
+    }
+
+    // Validate sessionId format (should not be just special characters)
+    if (sessionId.length < 3 || !/[a-zA-Z0-9]/.test(sessionId)) {
+      console.error('[receive-response] Invalid sessionId format:', sessionId);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid sessionId format. SessionId must contain at least 3 characters including letters or numbers.'
       });
     }
 
@@ -62,27 +85,65 @@ export default async function handler(
 
     // Create message object
     const message: ChatMessage = {
-      sessionId,
+      sessionId: sessionId.trim(),
       reply,
       timestamp: Date.now()
     };
 
     // Store message in Redis with automatic TTL
-    const key = `chat:${sessionId}`;
+    const key = `chat:${sessionId.trim()}`;
+
+    console.log(`[receive-response] Attempting to store message for session ${sessionId}`);
 
     // Get KV instance
-    const kvStore = await getKV();
+    let kvStore;
+    try {
+      kvStore = await getKV();
+    } catch (kvError) {
+      console.error('[receive-response] Failed to get KV instance:', kvError);
+      return res.status(503).json({
+        success: false,
+        error: 'Storage service unavailable',
+        message: kvError instanceof Error ? kvError.message : 'Failed to connect to storage'
+      });
+    }
 
-    // Get existing messages for this session
-    const existingMessages = await kvStore.get<ChatMessage[]>(key) || [];
+    // Get existing messages for this session with better error handling
+    let existingMessages: ChatMessage[] = [];
+    try {
+      const retrieved = await kvStore.get<ChatMessage[]>(key);
+
+      // Ensure we always work with an array
+      if (retrieved === null || retrieved === undefined) {
+        existingMessages = [];
+      } else if (Array.isArray(retrieved)) {
+        existingMessages = retrieved;
+      } else {
+        // If data is corrupted (not an array), log and reset
+        console.warn(`[receive-response] Corrupted data in KV for key ${key}, resetting to empty array`);
+        existingMessages = [];
+      }
+    } catch (getError) {
+      console.error('[receive-response] Error retrieving from KV:', getError);
+      // Continue with empty array if retrieval fails
+      existingMessages = [];
+    }
 
     // Add new message
     existingMessages.push(message);
 
     // Store back with TTL (messages auto-expire after 5 minutes)
-    await kvStore.set(key, existingMessages, { ex: MESSAGE_TTL });
-
-    console.log(`[receive-response] Stored message for session ${sessionId}: ${reply.substring(0, 50)}...`);
+    try {
+      await kvStore.set(key, existingMessages, { ex: MESSAGE_TTL });
+      console.log(`[receive-response] Successfully stored message for session ${sessionId}: ${reply.substring(0, 50)}...`);
+    } catch (setError) {
+      console.error('[receive-response] Error storing to KV:', setError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to store message',
+        message: setError instanceof Error ? setError.message : 'Storage operation failed'
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -90,7 +151,9 @@ export default async function handler(
     });
 
   } catch (error) {
-    console.error('[receive-response] Error:', error);
+    // Top-level error handler for any unexpected errors
+    console.error('[receive-response] Unexpected error:', error);
+    console.error('[receive-response] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
 
     // Check if error is related to KV configuration
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -98,9 +161,8 @@ export default async function handler(
 
     return res.status(500).json({
       success: false,
-      error: isKVError ? 'Storage service error' : 'Failed to store message',
-      message: errorMessage,
-      details: 'Please check that Vercel KV is properly configured with KV_REST_API_URL and KV_REST_API_TOKEN'
+      error: isKVError ? 'Storage service error' : 'Internal server error',
+      message: errorMessage
     });
   }
 }
